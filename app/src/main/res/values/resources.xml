@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GronkhTV</string>
+    <string name="dream_name">GronkhTV Galerie</string>
+    <string name="player_error">Verbindung weg. OK drücken für nochmal.</string>
+    <string name="player_error_touch">Verbindung weg. Abspielen tippen für nochmal.</string>
+    <color name="background">#FF0E0B16</color>
+    <style name="Theme.GronkhTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+</resources>

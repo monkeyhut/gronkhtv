@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- G im Bildschirmrahmen wie das GronkhTV-Konzeptbild; alles liegt in der 66-dp-Sicherheitszone jeder Maske. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M35,40.5H31A4,4 0,0 0,27 44.5V63.5A4,4 0,0 0,31 67.5H35M73,40.5H77A4,4 0,0 1,81 44.5V63.5A4,4 0,0 1,77 67.5H73"
+        android:strokeWidth="3"
+        android:strokeColor="#B3FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M64.25,43.75A14.5,14.5 0,1 0,68.5 54L55,54"
+        android:strokeWidth="8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineJoin="miter" />
+</vector>
