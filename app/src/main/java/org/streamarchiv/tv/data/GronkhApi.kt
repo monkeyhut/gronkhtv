@@ -1,9 +1,19 @@
 package org.streamarchiv.tv.data
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -27,6 +37,12 @@ object GronkhApi {
 
     /** 404 der Schnittstelle: das Video (oder die Kategorie) gibt es nicht mehr; anders als ein Netzfehler endgültig. */
     class NotFound(path: String) : IOException("gronkh.tv kennt $path nicht")
+
+    /**
+     * Nur dieser Text heißt „Eintrag gelöscht“ (gemessen 22.10.2026). Ein falscher oder umgezogener Pfad antwortet
+     * ebenfalls 404, aber mit „The route … could not be found“; der darf nichts aus den eigenen Listen werfen.
+     */
+    internal fun isMissingModel(body: String): Boolean = "No query results for model" in body
 
     enum class Discovery(val path: String) { NEWEST("newest"), HOT("hot"), RANDOM("random") }
     enum class Order(val field: String) { NEWEST("created_at"), VIEWS("views") }
@@ -57,7 +73,8 @@ object GronkhApi {
 
     /** Gronkhs eigener Kanal, falls er gerade live ist. Der 24/7-Kanal zählt bewusst nicht. */
     suspend fun gronkhLive(): LiveStream? =
-        get<List<LiveStream>>("/promoted/streams").firstOrNull { it.login == "gronkh" && it.type == "live" }
+        json.decodeFromJsonElement(SkipBroken(LiveStream.serializer()), get<JsonArray>("/promoted/streams"))
+            .firstOrNull { it.login == "gronkh" && it.type == "live" }
 
     /** Datei vom Video-CDN (Chat-Replay, Vorschauspur, Sprite); null bei 404, das beim Chat-Replay das Ende anzeigt. */
     suspend fun cdnFile(url: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -80,7 +97,7 @@ object GronkhApi {
     private suspend inline fun <reified T> call(request: Request): T = withContext(Dispatchers.IO) {
         val withAccept = request.newBuilder().header("Accept", "application/json").build()
         http.newCall(withAccept).execute().use { response ->
-            if (response.code == 404) throw NotFound(request.url.encodedPath)
+            if (response.code == 404 && isMissingModel(response.body.string())) throw NotFound(request.url.encodedPath)
             if (!response.isSuccessful) {
                 throw IOException("gronkh.tv antwortet ${response.code} auf ${request.url.encodedPath}")
             }
@@ -88,3 +105,27 @@ object GronkhApi {
         }
     }
 }
+
+/**
+ * Liest eine Liste Eintrag für Eintrag: ein einzelnes kaputtes Video (null in einem Pflichtfeld) fällt mit Hinweis im
+ * Log heraus, statt die ganze Seite scheitern zu lassen.
+ */
+internal class SkipBroken<T>(private val element: KSerializer<T>) : KSerializer<List<T>> {
+    private val list = ListSerializer(element)
+    override val descriptor = list.descriptor
+    override fun serialize(encoder: Encoder, value: List<T>) = list.serialize(encoder, value)
+
+    override fun deserialize(decoder: Decoder): List<T> {
+        val json = (decoder as JsonDecoder).json
+        return decoder.decodeJsonElement().jsonArray.mapNotNull { item ->
+            try {
+                json.decodeFromJsonElement(element, item)
+            } catch (e: SerializationException) {
+                Log.w("GronkhApi", "Eintrag ${(item as? JsonObject)?.get("id")} übersprungen", e)
+                null
+            }
+        }
+    }
+}
+
+internal object VideoList : KSerializer<List<Video>> by SkipBroken(Video.serializer())

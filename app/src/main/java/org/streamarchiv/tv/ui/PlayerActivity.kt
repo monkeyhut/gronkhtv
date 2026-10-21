@@ -320,7 +320,6 @@ class PlayerActivity : ComponentActivity() {
 
     /** Öffnet auf dem Einschlaf-Timer wie vor den Kapiteln, damit der eingeübte Griff bleibt; hoch führt zu den Kapiteln. */
     private fun openOptions() {
-        loadHighlightsOnce()
         view.hideController()
         updateChapter()
         playback.optionsCursor = OptionsCursor(
@@ -343,7 +342,8 @@ class PlayerActivity : ComponentActivity() {
     private fun applyOption(cursor: OptionsCursor) {
         playback.optionsCursor = null
         when (cursor.row) {
-            OptionsRow.CHAPTERS -> jumpToChapter(playback.chapters[cursor.chapter])
+            // Ein Tipp kann noch aus der Kapitelliste des vorigen Videos stammen; dann passt der Index nicht mehr.
+            OptionsRow.CHAPTERS -> playback.chapters.getOrNull(cursor.chapter)?.let(::jumpToChapter)
             OptionsRow.SLEEP -> setSleepTimer(SLEEP_CHOICES[cursor.sleep])
         }
     }

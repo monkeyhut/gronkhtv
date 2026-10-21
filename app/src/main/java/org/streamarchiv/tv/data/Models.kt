@@ -39,7 +39,10 @@ data class Chapter(
 data class Category(val title: String, val slug: String, val urls: CategoryUrls = CategoryUrls())
 
 @Serializable
-data class CategoryUrls(val boxarts: Map<String, String> = emptyMap())
+data class CategoryUrls(
+    // Wie thumbnail_urls: eine Größe kann null sein; nachgeschlagen gleicht sie einer fehlenden, die Liste scheitert nicht.
+    val boxarts: Map<String, String?> = emptyMap(),
+)
 
 /** Schlagwort der Redaktion, etwa „FREiAB18“ oder „H.O.R.D.E.“; fehlt bei älteren Videos oft. */
 @Serializable
@@ -69,12 +72,12 @@ data class LiveStream(
     val title: String,
     @SerialName("game_name") val game: String = "",
     @SerialName("viewer_count") val viewers: Int = 0,
-    @SerialName("thumbnail_urls") val thumbnails: Map<String, String> = emptyMap(),
+    @SerialName("thumbnail_urls") val thumbnails: Map<String, String?> = emptyMap(),
 )
 
 /** Antwort von discovery (ohne meta) und search (mit Seitenangaben). */
 @Serializable
-data class VideoPage(val data: List<Video>, val meta: PageMeta? = null)
+data class VideoPage(@Serializable(with = VideoList::class) val data: List<Video>, val meta: PageMeta? = null)
 
 @Serializable
 data class PageMeta(

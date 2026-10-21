@@ -45,6 +45,17 @@ suspend fun <T> runCatchingIo(block: suspend () -> T): Result<T> = try {
     Result.failure(e)
 }
 
+/**
+ * Welche IDs aus Weiterschauen und Merkliste fliegen: nur die, zu denen die Schnittstelle „gelöscht“ meldet, und nur,
+ * wenn im selben Durchgang mindestens ein anderes Video geladen wurde. Meldet sie alles als gelöscht (leere oder falsche
+ * Datenbank), wäre das ein Ausfall und kein Aufräumen. Eine feste Obergrenze je Durchgang schützte nicht: die Schleife
+ * in loadLocalRows holte Runde um Runde die nächsten und leerte die Listen so trotzdem.
+ * Preis dafür: Fehlt nur ein einziges, schon gelöschtes Video, fliegt es erst beim nächsten Durchgang mit Treffer.
+ */
+internal fun idsToForget(results: Map<String, Result<Video>>): Set<String> =
+    if (results.values.none { it.isSuccess }) emptySet()
+    else results.filterValues { it.exceptionOrNull() is GronkhApi.NotFound }.keys
+
 /** Ein angefangenes Video samt Stelle, für die Weiterschauen-Reihe. */
 data class Started(val video: Video, val positionMs: Long)
 
@@ -135,13 +146,22 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Die neuesten [RECENT_PAGES] Archivseiten; deren Kapitel ergeben die Spiele. Eine Liste aller Kategorien bietet die
      * Schnittstelle nicht an (categories antwortet 404), nur die Streams je Kategorie. Seite 1 ist zugleich der Kopf
-     * von „Alle Streams“ und wird deshalb nur einmal geholt.
+     * von „Alle Streams“ und wird deshalb nur einmal und zuerst geholt: scheitert eine spätere Seite, fehlen nur ein
+     * paar Spiele, „Alle Streams“ bleibt gefüllt.
      */
-    private suspend fun recentStreams(): List<Video> = coroutineScope {
-        val rest = (2..RECENT_PAGES).map { page -> async { GronkhApi.videos(Order.NEWEST, page).data } }
+    private suspend fun recentStreams(): List<Video> {
         val first = GronkhApi.videos(Order.NEWEST, 1)
         all.showHead(first)
-        (first.data + rest.awaitAll().flatten()).distinctById()
+        val rest = coroutineScope {
+            (2..RECENT_PAGES).map { page ->
+                async {
+                    runCatchingIo { GronkhApi.videos(Order.NEWEST, page).data }
+                        .onFailure { Log.w(TAG, "Archivseite $page für die Spiele nicht geladen", it) }
+                        .getOrDefault(emptyList())
+                }
+            }.awaitAll()
+        }
+        return (first.data + rest.flatten()).distinctById()
     }
 
     /**
@@ -157,7 +177,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Weiterschauen und Merkliste: die IDs liegen lokal, Titel und Bild kommen frisch aus der Schnittstelle. */
     private fun loadLocalRows() = viewModelScope.launch {
-        // Fiel ein gelöschtes Video raus, rückt ein weiteres in die ersten n nach und muss auch geladen werden.
+        // Fiel ein gelöschtes Video raus, rückt ein weiteres in die ersten n nach und muss auch geladen werden. Endet sicher:
+        // jede weitere Runde braucht einen Treffer und eine gelöschte ID, und beides gibt es nur endlich oft.
         do {
             val removed = loadUnknown((startedIds() + watchlistIds()).distinct())
         } while (removed)
@@ -171,22 +192,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private fun watchlistIds() = watchlistStore.ids().take(WATCHLIST_MAX)
 
     /**
-     * Holt nur Videos, die noch nicht in [known] stehen. Kennt die Schnittstelle eins nicht mehr (404), fliegt seine ID
-     * aus Weiterschauen und Merkliste; true heißt, es ist etwas rausgeflogen. Bei Netzfehlern fehlt nur die Karte, die
-     * ID bleibt für das nächste Mal.
+     * Holt nur Videos, die noch nicht in [known] stehen; was [idsToForget] nennt, fliegt aus Weiterschauen und Merkliste.
+     * true heißt, es ist etwas rausgeflogen. Bei Netzfehlern fehlt nur die Karte, die ID bleibt für das nächste Mal.
      */
-    private suspend fun loadUnknown(ids: List<String>): Boolean = coroutineScope {
+    private suspend fun loadUnknown(ids: List<String>): Boolean {
         val gate = Semaphore(DETAIL_PARALLEL)
-        ids.filter { it !in known }.map { id ->
-            async {
-                val result = gate.withPermit { runCatchingIo { GronkhApi.video(id) } }
-                    .onSuccess { known[id] = it }
-                    .onFailure { Log.w(TAG, "Video $id nicht geladen", it) }
-                val gone = result.exceptionOrNull() is GronkhApi.NotFound
-                if (gone) { resume.remove(id); watchlistStore.remove(id) }
-                gone
-            }
-        }.awaitAll().any { it }
+        val results = coroutineScope {
+            ids.filter { it !in known }.map { id -> async { id to gate.withPermit { runCatchingIo { GronkhApi.video(id) } } } }
+                .awaitAll()
+        }.toMap()
+        results.forEach { (id, result) ->
+            result.onSuccess { known[id] = it }.onFailure { Log.w(TAG, "Video $id nicht geladen", it) }
+        }
+        val gone = idsToForget(results)
+        gone.forEach { resume.remove(it); watchlistStore.remove(it) }
+        return gone.isNotEmpty()
     }
 
     fun refreshLive() = viewModelScope.launch {

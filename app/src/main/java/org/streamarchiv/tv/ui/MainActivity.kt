@@ -31,7 +31,7 @@ import androidx.tv.material3.darkColorScheme
 import org.streamarchiv.tv.data.LiveStream
 import org.streamarchiv.tv.data.Video
 import org.streamarchiv.tv.live.LiveWorker
-import org.streamarchiv.tv.live.twitchIntent
+import org.streamarchiv.tv.live.twitchOrWebIntent
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,8 +68,9 @@ class MainActivity : ComponentActivity() {
 
     private fun openTwitch(stream: LiveStream) {
         try {
-            startActivity(twitchIntent(stream.login))
+            startActivity(twitchOrWebIntent(stream.login))
         } catch (e: ActivityNotFoundException) {
+            // Weder Twitch-App noch Browser, wie auf manchem Fernseher.
             Toast.makeText(this, "Twitch-App fehlt, bitte aus dem Play Store installieren", Toast.LENGTH_LONG).show()
         }
     }

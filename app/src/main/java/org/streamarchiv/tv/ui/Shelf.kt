@@ -1,5 +1,6 @@
 package org.streamarchiv.tv.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -61,6 +62,8 @@ fun <T> Shelf(
     }
 }
 
+private const val RETRY_GAP_MS = 1_000L
+
 @Composable
 fun ErrorBanner(message: String, onRetry: () -> Unit) {
     Row(
@@ -73,8 +76,12 @@ fun ErrorBanner(message: String, onRetry: () -> Unit) {
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodyLarge,
         )
-        // Einmal je Banner: der Neuversuch blendet es aus, ein zweiter Tipp im selben Moment lüde alles doppelt.
-        var retried by remember { mutableStateOf(false) }
-        AppButton(onClick = { if (!retried) { retried = true; onRetry() } }) { Text("Nochmal") }
+        // Höchstens ein Neuversuch je Sekunde: ein Doppeltipp lüde sonst alles doppelt. Eine Sperre für immer hielte
+        // den Knopf tot, wenn der Versuch sofort wieder scheitert und dasselbe Banner stehen bleibt.
+        var retriedAt by remember { mutableLongStateOf(-RETRY_GAP_MS) }
+        AppButton(onClick = {
+            val now = SystemClock.uptimeMillis()
+            if (now - retriedAt >= RETRY_GAP_MS) { retriedAt = now; onRetry() }
+        }) { Text("Nochmal") }
     }
 }

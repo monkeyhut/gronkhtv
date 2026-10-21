@@ -12,8 +12,8 @@ android {
         applicationId = "org.streamarchiv.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "9.4"
+        versionCode = 14
+        versionName = "9.5"
     }
 
     buildTypes {
@@ -27,6 +27,8 @@ android {
         }
     }
     buildFeatures { compose = true }
+    // Die reine Logik loggt über android.util.Log; in JVM-Tests soll das still nichts tun statt abzubrechen.
+    testOptions { unitTests.isReturnDefaultValues = true }
 }
 
 dependencies {

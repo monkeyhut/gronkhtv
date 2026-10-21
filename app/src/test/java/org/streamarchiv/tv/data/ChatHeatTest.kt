@@ -44,10 +44,24 @@ class ChatHeatTest {
         count(3_000) { throw IOException("Netz weg") }
     }
 
-    @Test fun `endet der Chat vor dem Video, wird beim nächsten Mal neu gezählt`() {
+    @Test fun `endet der Chat mit 404 vor dem Video, ist die Zählung fertig und darf in den Cache`() {
         val result = count(3_000) { i -> if (i < 2) block(i) else null }
         assertEquals(2, result.perMinute.sum())
-        assertFalse(result.complete)
+        assertTrue(result.complete)
         assertNull(result.failure)
+    }
+
+    @Test fun `Nachricht ohne Zeit zählt nicht und lässt den Block nicht scheitern`() {
+        val chunk = """{"messages":[{"offset":null},{"user":"x"},{"offset":70}]}""".encodeToByteArray()
+        val result = count(300) { i -> if (i == 0) chunk else null }
+        assertEquals(1, result.perMinute.sum())
+        assertEquals(1, result.perMinute[1])
+        assertNull(result.failure)
+    }
+
+    @Test fun `ohne Block 0 ist die leere Zählung fertig`() {
+        val result = count(3_000) { null }
+        assertEquals(0, result.perMinute.sum())
+        assertTrue(result.complete)
     }
 }
