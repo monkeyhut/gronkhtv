@@ -23,10 +23,9 @@ class GamesTest {
         video("1090", "Special Events" to 7200, "Big Ambitions" to 9000),
     )
 
-    @Test fun `zählt Streams, nicht Kapitel, und summiert die Zeit`() {
+    @Test fun `zählt Streams, nicht Kapitel`() {
         val nivalis = rankCategories(streams).single { it.category.title == "Nivalis Nights" }
         assertEquals(2, nivalis.streams)
-        assertEquals(35880L + 24899 + 600, nivalis.seconds)
     }
 
     @Test fun `häufigste zuerst, bei Gleichstand die zuletzt gespielte`() {

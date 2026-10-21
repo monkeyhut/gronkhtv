@@ -19,17 +19,17 @@ class PreviewTrackTest {
         ad66f668_sprite.jpg#xywh=640,6210,160,90
     """.trimIndent()
 
-    @Test fun `liest Zeitbereich und Ausschnitt`() {
+    @Test fun `liest Startzeit und Ausschnitt`() {
         val cues = parsePreviewVtt(vtt)
         assertEquals(3, cues.size)
-        assertEquals(PreviewCue(61_000, 122_000, 160, 0, 160, 90), cues[1])
+        assertEquals(PreviewCue(61_000, 160, 0, 160, 90), cues[1])
         assertEquals(42_334_000L, cues[2].startMs)
         assertEquals(6210, cues[2].y)
     }
 
     @Test fun `Zeit ohne Stunden geht auch`() {
         val cues = parsePreviewVtt("WEBVTT\n\n01:05.500 --> 02:00.000\nx.jpg#xywh=1,2,3,4\n")
-        assertEquals(PreviewCue(65_500, 120_000, 1, 2, 3, 4), cues.single())
+        assertEquals(PreviewCue(65_500, 1, 2, 3, 4), cues.single())
     }
 
     @Test fun `findet das Bild zur Stelle`() {

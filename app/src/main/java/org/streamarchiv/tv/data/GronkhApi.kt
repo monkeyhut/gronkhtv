@@ -19,9 +19,14 @@ import java.net.URLEncoder
  */
 object GronkhApi {
     private const val BASE = "https://backend.gronkh.tv/v3"
-    private val json = Json { ignoreUnknownKeys = true }
+    // coerceInputValues: Die Schnittstelle schickt gelegentlich null statt eines Werts (z. B. "boxarts": null bei einem
+    // neuen Spiel). Ohne das scheiterte daran die ganze Liste; so gilt dann der Standardwert des Felds.
+    internal val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     private val jsonType = "application/json".toMediaType()
     private val http = OkHttpClient()
+
+    /** 404 der Schnittstelle: das Video (oder die Kategorie) gibt es nicht mehr; anders als ein Netzfehler endgültig. */
+    class NotFound(path: String) : IOException("gronkh.tv kennt $path nicht")
 
     enum class Discovery(val path: String) { NEWEST("newest"), HOT("hot"), RANDOM("random") }
     enum class Order(val field: String) { NEWEST("created_at"), VIEWS("views") }
@@ -75,6 +80,7 @@ object GronkhApi {
     private suspend inline fun <reified T> call(request: Request): T = withContext(Dispatchers.IO) {
         val withAccept = request.newBuilder().header("Accept", "application/json").build()
         http.newCall(withAccept).execute().use { response ->
+            if (response.code == 404) throw NotFound(request.url.encodedPath)
             if (!response.isSuccessful) {
                 throw IOException("gronkh.tv antwortet ${response.code} auf ${request.url.encodedPath}")
             }

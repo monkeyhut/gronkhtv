@@ -12,8 +12,8 @@ android {
         applicationId = "org.streamarchiv.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "9.3"
+        versionCode = 13
+        versionName = "9.4"
     }
 
     buildTypes {

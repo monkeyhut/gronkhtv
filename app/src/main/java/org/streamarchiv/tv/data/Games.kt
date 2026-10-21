@@ -1,7 +1,7 @@
 package org.streamarchiv.tv.data
 
-/** Ein Spiel oder Thema über mehrere Streams: in wie vielen es als Kapitel vorkommt und wie lange insgesamt (Sekunden). */
-data class GameStats(val category: Category, val streams: Int, val seconds: Long)
+/** Ein Spiel oder Thema über mehrere Streams: in wie vielen es als Kapitel vorkommt. */
+data class GameStats(val category: Category, val streams: Int)
 
 /**
  * Kategorien, die keine Spiele sind (gemessen an den 60 neuesten Streams, 21.10.2026). Die igdb_id trennt nicht sauber,
@@ -22,9 +22,7 @@ fun rankCategories(videos: List<Video>): List<GameStats> {
         val counted = HashSet<String>()
         for (chapter in video.chapters) {
             val category = chapter.category ?: continue
-            val old = stats[category.slug]
-            val newStream = if (counted.add(category.slug)) 1 else 0
-            stats[category.slug] = GameStats(category, (old?.streams ?: 0) + newStream, (old?.seconds ?: 0) + chapter.end - chapter.start)
+            if (counted.add(category.slug)) stats[category.slug] = GameStats(category, (stats[category.slug]?.streams ?: 0) + 1)
         }
     }
     return stats.values.sortedByDescending { it.streams }

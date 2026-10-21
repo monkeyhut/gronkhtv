@@ -3,6 +3,12 @@ package org.streamarchiv.tv.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+/**
+ * Die Schnittstelle liefert dasselbe Video manchmal zweimal in einer Antwort; doppelte Schlüssel lassen eine
+ * LazyRow abstürzen. Deshalb läuft jede Liste vor der Anzeige hier durch.
+ */
+fun List<Video>.distinctById(): List<Video> = distinctBy { it.id }
+
 @Serializable
 data class Video(
     val id: String,

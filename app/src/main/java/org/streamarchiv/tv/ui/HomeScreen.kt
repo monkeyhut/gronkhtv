@@ -132,7 +132,7 @@ fun HomeScreen(
         item(key = "alle") { VideoShelf("Alle Streams", vm.all.items, onOpenVideo, onMark, onNearEnd = vm.all::loadMore) }
         item(key = "meistgesehen") { VideoShelf("Meistgesehen", vm.mostViewed.items, onOpenVideo, onMark, onNearEnd = vm.mostViewed::loadMore) }
         item(key = "zufall") { VideoShelf("Zufallsfund", vm.random, onOpenVideo, onMark) }
-        vm.watchedThisMonth?.let { month -> item(key = "rueckblick") { MonthReviewCard(month) } }
+        vm.watchedThisMonth?.let { summary -> item(key = "rueckblick") { MonthReviewCard(summary) } }
     }
 }
 

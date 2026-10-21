@@ -11,6 +11,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +73,8 @@ fun ErrorBanner(message: String, onRetry: () -> Unit) {
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodyLarge,
         )
-        AppButton(onClick = onRetry) { Text("Nochmal") }
+        // Einmal je Banner: der Neuversuch blendet es aus, ein zweiter Tipp im selben Moment lüde alles doppelt.
+        var retried by remember { mutableStateOf(false) }
+        AppButton(onClick = { if (!retried) { retried = true; onRetry() } }) { Text("Nochmal") }
     }
 }

@@ -2,12 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Ob das Netz getaktet ist (Mobilfunk); danach richtet sich, wann der Player das Chat-Replay lädt. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Für „Gronkh ist live“; ab Android 13 fragt die App beim ersten Start danach. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Fernseher und Handy aus einer APK: kein Merkmal ist Pflicht. Ohne diese Angaben blendet der Google-TV-Launcher sie aus. -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!-- Ab Android 11 sieht eine App fremde Apps nur, wenn sie danach fragt; hier: ob die Twitch-App da ist. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="twitch" />
+        </intent>
+    </queries>
 
     <application
         android:banner="@drawable/banner"
@@ -30,11 +40,14 @@
             android:name=".ui.GameActivity"
             android:exported="false" />
 
-        <!-- Drehen und Bild im Bild dürfen die Activity nicht neu aufbauen, sonst bräche das Video ab. -->
+        <!-- Drehen und Bild im Bild dürfen die Activity nicht neu aufbauen, sonst bräche das Video ab.
+             singleTask: es gibt genau einen Player. Wird im Bild-im-Bild-Fenster ein anderes Video angetippt, holt das
+             System das Fenster zurück und reicht das Video per onNewIntent herein (Androids Vorgabe für Bild im Bild
+             mit einer Wiedergabe-Activity). singleInstancePerTask erlaubte dagegen je Task eine eigene Instanz. -->
         <activity
             android:name=".ui.PlayerActivity"
             android:exported="false"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" />

@@ -22,6 +22,7 @@ import org.streamarchiv.tv.data.WatchStats
 import org.streamarchiv.tv.data.WatchSummary
 import org.streamarchiv.tv.data.WatchlistStore
 import org.streamarchiv.tv.data.currentGames
+import org.streamarchiv.tv.data.distinctById
 import org.streamarchiv.tv.data.gameShelf
 import org.streamarchiv.tv.data.monthOf
 import kotlinx.coroutines.async
@@ -106,13 +107,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 coroutineScope {
                     val n = async { GronkhApi.discovery(Discovery.NEWEST) }
                     val h = async { GronkhApi.discovery(Discovery.HOT) }
-                    newest = n.await(); hot = h.await()
+                    newest = n.await().distinctById(); hot = h.await().distinctById()
                 }
             }.onFailure(showError)
         }
         // Der Zufallsfund wechselt nur beim ersten Laden, sonst springt die Reihe unter dem Fokus weg.
         if (random.isEmpty()) viewModelScope.launch {
-            runCatchingIo { GronkhApi.discovery(Discovery.RANDOM) }.onSuccess { random = it }.onFailure(showError)
+            runCatchingIo { GronkhApi.discovery(Discovery.RANDOM) }.onSuccess { random = it.distinctById() }.onFailure(showError)
         }
         viewModelScope.launch {
             runCatchingIo { recentStreams() }
@@ -127,17 +128,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 .onFailure(showError)
         }
-        all.refreshHead()
         mostViewed.refreshHead()
         formats.forEach { (_, list) -> list.refreshHead() }
     }
 
     /**
      * Die neuesten [RECENT_PAGES] Archivseiten; deren Kapitel ergeben die Spiele. Eine Liste aller Kategorien bietet die
-     * Schnittstelle nicht an (categories antwortet 404), nur die Streams je Kategorie.
+     * Schnittstelle nicht an (categories antwortet 404), nur die Streams je Kategorie. Seite 1 ist zugleich der Kopf
+     * von „Alle Streams“ und wird deshalb nur einmal geholt.
      */
     private suspend fun recentStreams(): List<Video> = coroutineScope {
-        (1..RECENT_PAGES).map { page -> async { GronkhApi.videos(Order.NEWEST, page).data } }.awaitAll().flatten().distinctBy { it.id }
+        val rest = (2..RECENT_PAGES).map { page -> async { GronkhApi.videos(Order.NEWEST, page).data } }
+        val first = GronkhApi.videos(Order.NEWEST, 1)
+        all.showHead(first)
+        (first.data + rest.awaitAll().flatten()).distinctById()
     }
 
     /**
@@ -153,27 +157,36 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Weiterschauen und Merkliste: die IDs liegen lokal, Titel und Bild kommen frisch aus der Schnittstelle. */
     private fun loadLocalRows() = viewModelScope.launch {
-        val started = resume.startedIds().take(CONTINUE_MAX)
-        loadUnknown((started + watchlistStore.ids().take(WATCHLIST_MAX)).distinct())
-        continueWatching = started.mapNotNull { known[it] }.map { Started(it, resume.position(it.id)) }
+        // Fiel ein gelöschtes Video raus, rückt ein weiteres in die ersten n nach und muss auch geladen werden.
+        do {
+            val removed = loadUnknown((startedIds() + watchlistIds()).distinct())
+        } while (removed)
+        continueWatching = startedIds().mapNotNull { known[it] }.map { Started(it, resume.position(it.id)) }
         // Erst nach dem Laden lesen: wer währenddessen merkt oder entfernt, würde sonst vom alten Stand überschrieben.
-        watchlist = watchlistStore.ids().take(WATCHLIST_MAX).mapNotNull { known[it] }
+        watchlist = watchlistIds().mapNotNull { known[it] }
         localRowsLoaded = true
     }
 
+    private fun startedIds() = resume.startedIds().take(CONTINUE_MAX)
+    private fun watchlistIds() = watchlistStore.ids().take(WATCHLIST_MAX)
+
     /**
-     * Holt nur Videos, die noch nicht in [known] stehen. Scheitert eins (gelöscht, Netz weg), fehlt nur diese Karte;
-     * bekannte bleiben, und die gespeicherte ID bleibt auch.
+     * Holt nur Videos, die noch nicht in [known] stehen. Kennt die Schnittstelle eins nicht mehr (404), fliegt seine ID
+     * aus Weiterschauen und Merkliste; true heißt, es ist etwas rausgeflogen. Bei Netzfehlern fehlt nur die Karte, die
+     * ID bleibt für das nächste Mal.
      */
-    private suspend fun loadUnknown(ids: List<String>) = coroutineScope {
+    private suspend fun loadUnknown(ids: List<String>): Boolean = coroutineScope {
         val gate = Semaphore(DETAIL_PARALLEL)
-        ids.filter { it !in known }.forEach { id ->
-            launch {
-                gate.withPermit { runCatchingIo { GronkhApi.video(id) } }
+        ids.filter { it !in known }.map { id ->
+            async {
+                val result = gate.withPermit { runCatchingIo { GronkhApi.video(id) } }
                     .onSuccess { known[id] = it }
                     .onFailure { Log.w(TAG, "Video $id nicht geladen", it) }
+                val gone = result.exceptionOrNull() is GronkhApi.NotFound
+                if (gone) { resume.remove(id); watchlistStore.remove(id) }
+                gone
             }
-        }
+        }.awaitAll().any { it }
     }
 
     fun refreshLive() = viewModelScope.launch {

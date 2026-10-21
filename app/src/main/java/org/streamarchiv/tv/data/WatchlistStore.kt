@@ -13,6 +13,8 @@ class WatchlistStore(context: Context) {
         return marked
     }
 
+    fun remove(videoId: String) = prefs.edit().remove(videoId).apply()
+
     /** Zuletzt gemerkte zuerst. */
     fun ids(): List<String> = prefs.all.keys.sortedByDescending { prefs.getLong(it, 0L) }
 }

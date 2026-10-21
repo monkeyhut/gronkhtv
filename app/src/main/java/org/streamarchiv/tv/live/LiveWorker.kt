@@ -46,7 +46,7 @@ class LiveWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Gronkh ist live", NotificationManager.IMPORTANCE_HIGH))
         // Außerhalb einer Activity gestartet, deshalb als neue Aufgabe.
-        val open = twitchIntent(stream.login).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val open = applicationContext.twitchOrWebIntent(stream.login).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val notification = Notification.Builder(applicationContext, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Gronkh ist live: ${stream.title}")

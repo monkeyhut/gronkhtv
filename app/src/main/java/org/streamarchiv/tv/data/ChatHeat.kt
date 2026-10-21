@@ -8,6 +8,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.streamarchiv.tv.ui.runCatchingIo
 import java.io.File
 import java.io.IOException
 
@@ -21,36 +22,55 @@ object ChatHeat {
     private const val PARALLEL = 4
     private const val CHUNK_SECONDS = 300
     private val json = Json { ignoreUnknownKeys = true }
+    /** Die ID wird zum Dateinamen; alles außer diesen Zeichen könnte aus dem Cache-Ordner hinausführen. */
+    private val safeId = Regex("[A-Za-z0-9-]+")
 
     @Serializable private class Chunk(val messages: List<Message> = emptyList())
     @Serializable private class Message(val offset: Int)
+
+    /** Zählung je Minute; [complete], wenn die Blöcke das ganze Video abdecken und sie in den Cache darf. */
+    internal class Count(val perMinute: IntArray, val complete: Boolean, val failure: Throwable?)
 
     /** Null, wenn das Video kein Chat-Replay oder keine Länge hat. */
     suspend fun perMinute(cacheDir: File, video: Video): IntArray? {
         val folder = video.urls.chat ?: return null
         if (video.meta.duration <= 0) return null
-        val file = File(cacheDir, "chat-heat/${video.id}")
+        val file = File(cacheDir, "chat-heat/${video.id}").takeIf { safeId.matches(video.id) }
         return withContext(Dispatchers.IO) {
-            read(file) ?: count(folder, video.meta.duration).also { save(file, it) }
+            file?.let(::read) ?: count(folder, video.meta.duration) { GronkhApi.cdnFile(it) }.let { result ->
+                result.failure?.let { Log.w(TAG, "Chat-Replay von ${video.id} nur teilweise gezählt", it) }
+                if (result.complete && file != null) save(file, result.perMinute)
+                result.perMinute
+            }
         }
     }
 
-    private suspend fun count(folder: String, seconds: Long): IntArray = coroutineScope {
+    /**
+     * Holt die Blöcke zu viert parallel und zählt nur die lückenlose Folge ab Block 0. Scheitert ein Block, bleibt
+     * das bis dahin Gezählte gültig, kommt aber nicht in den Cache; scheitert schon der erste, gibt es nichts zu zeigen.
+     */
+    internal suspend fun count(folder: String, seconds: Long, fetch: suspend (String) -> ByteArray?): Count = coroutineScope {
         val perMinute = IntArray((seconds / 60 + 1).toInt())
-        var next = 0
+        var loaded = 0
+        var failure: Throwable? = null
+        var ended = false
         // Die Grenze schützt nur vor einer Endlosschleife, falls das 404 ausbleibt; der Chat läuft etwas über das Video hinaus.
-        while (next * CHUNK_SECONDS < seconds + 3600) {
-            val chunks = (next until next + PARALLEL).map { i ->
-                async { GronkhApi.cdnFile(folder + i)?.let { json.decodeFromString<Chunk>(it.decodeToString()) } }
+        while (!ended && loaded * CHUNK_SECONDS < seconds + 3600) {
+            val chunks = (loaded until loaded + PARALLEL).map { i ->
+                async { runCatchingIo { fetch(folder + i)?.let { json.decodeFromString<Chunk>(it.decodeToString()) } } }
             }.awaitAll()
-            for (message in chunks.filterNotNull().flatMap { it.messages }) {
-                val minute = message.offset / 60
-                if (minute in perMinute.indices) perMinute[minute]++
+            for (chunk in chunks) {
+                val messages = chunk.getOrElse { failure = it; null }?.messages
+                if (messages == null) { ended = true; break }
+                for (message in messages) {
+                    val minute = message.offset / 60
+                    if (minute in perMinute.indices) perMinute[minute]++
+                }
+                loaded++
             }
-            if (chunks.any { it == null }) break
-            next += PARALLEL
         }
-        perMinute
+        failure?.let { if (loaded == 0) throw it }
+        Count(perMinute, complete = failure == null && loaded * CHUNK_SECONDS >= seconds, failure)
     }
 
     private fun read(file: File): IntArray? =

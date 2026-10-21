@@ -15,17 +15,18 @@ class WatchStats(context: Context) {
     fun add(video: Video, seconds: Long, nowMs: Long = System.currentTimeMillis()) {
         if (seconds <= 0) return
         val month = monthOf(nowMs)
-        val monthKey = MONTH + month
+        val monthKey = "$MONTH$month"
         val videoKey = "$VIDEO$month:${video.id}"
-        prefs.edit()
-            .putLong(monthKey, prefs.getLong(monthKey, 0) + seconds)
-            .putLong(videoKey, prefs.getLong(videoKey, 0) + seconds)
-            .putString(TITLE + video.id, video.title.take(TITLE_MAX))
-            .apply()
+        val keys = prefs.all.keys
+        prefs.edit().apply {
+            staleStatKeys(keys, month, video.id).forEach(::remove)
+            putLong(monthKey, prefs.getLong(monthKey, 0) + seconds)
+            putLong(videoKey, prefs.getLong(videoKey, 0) + seconds)
+            if (TITLE + video.id !in keys) putString(TITLE + video.id, video.title.take(TITLE_MAX))
+        }.apply()
     }
 
-    /** Summen für einen Zeitraum: „2026“ für ein Jahr, „2026-10“ für einen Monat. */
-    fun summary(period: String): WatchSummary = summarize(prefs.all, period)
+    fun summary(month: YearMonth): WatchSummary = summarize(prefs.all, month)
 
     companion object {
         internal const val MONTH = "m:"
@@ -38,23 +39,32 @@ class WatchStats(context: Context) {
 data class WatchedVideo(val id: String, val title: String, val seconds: Long)
 
 /** [videos] absteigend nach Sekunden, das meistgeschaute zuerst. */
-data class WatchSummary(val seconds: Long, val months: Map<String, Long>, val videos: List<WatchedVideo>)
+data class WatchSummary(val month: YearMonth, val seconds: Long, val videos: List<WatchedVideo>)
 
-fun monthOf(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): String =
-    YearMonth.from(Instant.ofEpochMilli(epochMs).atZone(zone)).toString()
+fun monthOf(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): YearMonth =
+    YearMonth.from(Instant.ofEpochMilli(epochMs).atZone(zone))
+
+/**
+ * Was beim Buchen in [month] wegkann, damit die Datei nicht mit jedem geschauten Video wächst: Videozeiten anderer
+ * Monate (der Rückblick zeigt nur den laufenden) und Titel von Videos ohne Zeit in [month] außer [playing].
+ * Die Monatssummen bleiben, sie sind je Monat nur eine Zahl.
+ */
+fun staleStatKeys(keys: Set<String>, month: YearMonth, playing: String): List<String> {
+    val current = "${WatchStats.VIDEO}$month:"
+    val titled = keys.filter { it.startsWith(current) }.mapTo(hashSetOf(playing)) { it.removePrefix(current) }
+    return keys.filter {
+        (it.startsWith(WatchStats.VIDEO) && !it.startsWith(current)) ||
+            (it.startsWith(WatchStats.TITLE) && it.removePrefix(WatchStats.TITLE) !in titled)
+    }
+}
 
 /** Rein, damit ein Test die Zählung ohne Gerät prüft. Schlüssel: m:<Monat>, v:<Monat>:<Video-ID>, t:<Video-ID>. */
-fun summarize(all: Map<String, *>, period: String): WatchSummary {
-    val months = all.mapNotNull { (key, value) ->
-        val month = key.removePrefix(WatchStats.MONTH)
-        if (key.startsWith(WatchStats.MONTH) && month.startsWith(period) && value is Long) month to value else null
-    }.toMap().toSortedMap()
+fun summarize(all: Map<String, *>, month: YearMonth): WatchSummary {
+    val prefix = "${WatchStats.VIDEO}$month:"
     val videos = all.mapNotNull { (key, value) ->
-        if (!key.startsWith(WatchStats.VIDEO) || value !is Long) return@mapNotNull null
-        val (month, id) = key.removePrefix(WatchStats.VIDEO).split(':', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
-        if (month.startsWith(period)) id to value else null
-    }.groupBy({ it.first }, { it.second })
-        .map { (id, parts) -> WatchedVideo(id, all[WatchStats.TITLE + id] as? String ?: "", parts.sum()) }
-        .sortedByDescending { it.seconds }
-    return WatchSummary(months.values.sum(), months, videos)
+        if (!key.startsWith(prefix) || value !is Long) return@mapNotNull null
+        val id = key.removePrefix(prefix)
+        WatchedVideo(id, all[WatchStats.TITLE + id] as? String ?: "", value)
+    }.sortedByDescending { it.seconds }
+    return WatchSummary(month, all["${WatchStats.MONTH}$month"] as? Long ?: 0L, videos)
 }

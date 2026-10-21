@@ -52,23 +52,15 @@ val SLEEP_CHOICES = listOf(0, 30, 60, 90)
 /**
  * Was der Player über dem Bild einblendet. Die Activity schreibt die Werte, Compose zeichnet nur;
  * die Tasten bleiben bei der Activity, damit die abgestimmte Belegung an einer Stelle steht.
+ * Was zum laufenden Video gehört, steht in [playback]; hier steht nur, was über einen Videowechsel hinweg gilt.
  */
 class PlayerOverlayState {
+    var playback by mutableStateOf<PlaybackSession?>(null)
     var barShown by mutableStateOf(false)
     var hint by mutableStateOf<String?>(null)
-    var preview by mutableStateOf<SeekPreview?>(null)
     /** Gewählter Einschlaf-Timer (aus [SLEEP_CHOICES]) und Restzeit in Minuten, solange er läuft. */
     var sleepChoice by mutableStateOf(0)
     var sleepLeftMin by mutableStateOf<Int?>(null)
-    /** Markierte Wahl im Optionsfenster; null = Fenster zu. */
-    var optionsCursor by mutableStateOf<OptionsCursor?>(null)
-    var upNext by mutableStateOf<UpNext?>(null)
-    /** Kapitel des laufenden Videos und das an der aktuellen Stelle; aktualisiert beim Einblenden und Springen. */
-    var chapters by mutableStateOf<List<Chapter>>(emptyList())
-    var chapter by mutableStateOf<Chapter?>(null)
-    /** Das laufende Video und, auf dem Handy vorab gesucht, der nächste Teil für die Videoseite im Hochformat. */
-    var video by mutableStateOf<Video?>(null)
-    var next by mutableStateOf<Video?>(null)
     /** Hochformat auf dem Handy: das Bild steht klein über der Videoseite, Optionen und „Als Nächstes“ stehen dort. */
     var inline by mutableStateOf(false)
 }
@@ -86,8 +78,9 @@ class OverlayTaps(
 
 @Composable
 fun PlayerOverlay(state: PlayerOverlayState, taps: OverlayTaps) = MaterialTheme(colorScheme = Colors) {
+    val playback = state.playback ?: return@MaterialTheme
     Box(Modifier.fillMaxSize()) {
-        state.preview?.let { SeekPreviewFrame(it) }
+        playback.preview?.let { SeekPreviewFrame(it) }
         state.hint?.let { Hint(it, Modifier.align(Alignment.TopCenter).padding(top = 48.dp)) }
         // Dezent mit der Leiste, damit man den Timer nicht vergisst, aber nicht dauernd im Bild hat.
         // Auf dem Handy steht dort der Knopf zu Kapiteln und Timer und trägt die Restzeit mit.
@@ -107,13 +100,13 @@ fun PlayerOverlay(state: PlayerOverlayState, taps: OverlayTaps) = MaterialTheme(
                 style = MaterialTheme.typography.titleSmall,
             )
         }
-        if (state.barShown) state.chapter?.let { ChapterLabel(it, Modifier.align(Alignment.TopStart).padding(top = 32.dp, start = 48.dp)) }
+        if (state.barShown) playback.chapter?.let { ChapterLabel(it, Modifier.align(Alignment.TopStart).padding(top = 32.dp, start = 48.dp)) }
         // Über der Zeitleiste, die am Ende offen steht.
-        if (!state.inline) state.upNext?.let { UpNextCard(it, Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 140.dp).onTap(taps.startNext)) }
-        state.optionsCursor?.let {
+        if (!state.inline) playback.upNext?.let { UpNextCard(it, Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 140.dp).onTap(taps.startNext)) }
+        playback.optionsCursor?.let {
             // Tippen daneben schließt; ohne diese Fläche ginge der Tipp an den Player und blendete die Leiste ein.
             if (TouchUi) Box(Modifier.fillMaxSize().clickable(interactionSource = null, indication = null, onClick = taps.closeOptions))
-            Options(it, state.chapters, state.chapter, state.sleepChoice, taps.pick, Modifier.align(Alignment.Center))
+            Options(it, playback.chapters, playback.chapter, state.sleepChoice, taps.pick, Modifier.align(Alignment.Center))
         }
     }
 }

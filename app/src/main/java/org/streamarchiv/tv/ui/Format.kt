@@ -6,6 +6,7 @@ import java.text.NumberFormat
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
 
 private val german = Locale.GERMANY
@@ -15,8 +16,15 @@ fun Video.subtitle(): String = listOfNotNull(
     episode?.let { "#$it" },
     formatDuration(meta.duration),
     "${NumberFormat.getIntegerInstance(german).format(views)} Aufrufe",
-    OffsetDateTime.parse(createdAt).atZoneSameInstant(ZoneId.systemDefault()).format(dateFormat),
+    localDate(createdAt),
 ).joinToString("  ·  ")
+
+/** Ein Datum, das die Schnittstelle anders schreibt, kostet nur die Angabe; in der Composition risse es die App mit. */
+private fun localDate(iso: String): String? = try {
+    OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault()).format(dateFormat)
+} catch (e: DateTimeParseException) {
+    null
+}
 
 /** Wo und wie lange ein Spiel im Stream läuft: „ab 2:26 h  ·  1:09 h lang“. */
 fun Chapter.subtitle(): String {

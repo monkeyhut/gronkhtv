@@ -29,7 +29,8 @@ import org.streamarchiv.tv.data.Video
  */
 @Composable
 fun PlayerDetails(state: PlayerOverlayState, taps: OverlayTaps) = MaterialTheme(colorScheme = Colors) {
-    val video = state.video ?: return@MaterialTheme
+    val playback = state.playback ?: return@MaterialTheme
+    val video = playback.video
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -42,16 +43,16 @@ fun PlayerDetails(state: PlayerOverlayState, taps: OverlayTaps) = MaterialTheme(
                 Text(video.subtitle(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
-        (state.upNext?.video ?: state.next)?.let { next ->
-            item { NextRow(next, state.upNext?.secondsLeft, Modifier.fillMaxWidth().onTap(taps.startNext)) }
+        (playback.upNext?.video ?: playback.next)?.let { next ->
+            item { NextRow(next, playback.upNext?.secondsLeft, Modifier.fillMaxWidth().onTap(taps.startNext)) }
         }
-        if (state.chapters.isNotEmpty()) {
+        if (playback.chapters.isNotEmpty()) {
             item { Heading("Kapitel") }
-            itemsIndexed(state.chapters) { i, chapter ->
+            itemsIndexed(playback.chapters) { i, chapter ->
                 ChapterChoice(
                     chapter,
                     focused = false,
-                    playing = chapter == state.chapter,
+                    playing = chapter == playback.chapter,
                     Modifier.fillMaxWidth().onTap { taps.pick(OptionsCursor(OptionsRow.CHAPTERS, chapter = i, sleep = 0)) },
                 )
             }

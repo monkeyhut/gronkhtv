@@ -15,14 +15,13 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import org.streamarchiv.tv.data.WatchSummary
-import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-/** Rückblick auf den laufenden Monat ganz unten auf der Startseite; dunkel und violett wie die Live-Karte. */
+/** Rückblick auf den Monat aus [summary] ganz unten auf der Startseite; dunkel und violett wie die Live-Karte. */
 @Composable
-fun MonthReviewCard(month: WatchSummary) {
-    val name = YearMonth.now().month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.GERMANY)
+fun MonthReviewCard(summary: WatchSummary) {
+    val name = summary.month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.GERMANY)
     // Ohne onClick: am Fernseher trotzdem fokussierbar, sonst scrollt das Steuerkreuz nie bis hierher; OK tut bewusst nichts.
     Tile(onClick = null, modifier = Modifier.padding(horizontal = ScreenPadding).fillMaxWidth()) {
         Column(
@@ -34,10 +33,10 @@ fun MonthReviewCard(month: WatchSummary) {
         ) {
             Text("Dein $name", style = MaterialTheme.typography.headlineSmall, color = Color.White)
             Row(horizontalArrangement = Arrangement.spacedBy(56.dp)) {
-                Figure(formatDuration(month.seconds), "geschaut")
-                Figure("${month.videos.size}", if (month.videos.size == 1) "Stream" else "Streams")
+                Figure(formatDuration(summary.seconds), "geschaut")
+                Figure("${summary.videos.size}", if (summary.videos.size == 1) "Stream" else "Streams")
             }
-            month.videos.firstOrNull()?.title?.takeIf { it.isNotBlank() }?.let {
+            summary.videos.firstOrNull()?.title?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     "Am meisten: $it",
                     style = MaterialTheme.typography.bodyLarge,
